@@ -3,10 +3,14 @@ import os
 import time
 import smtplib
 import cv2, sys
+import numpy as np
+from PIL import Image
 from openai import OpenAI
 from ultralytics import YOLO
+from datetime import datetime
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 
 # Load environment variables from a .env file
@@ -59,13 +63,17 @@ def check_person(frame) -> bool:
         print(f"Error :{e}")
     return False
 
-def send_message(alert) -> None:
+def send_message(alert, file) -> None:
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = "Unauthorized Presence Detected"
     body = alert
     msg.attach(MIMEText(body, 'plain'))
+
+    with open(file, "rb") as f:
+        img = MIMEImage(f.read(), _subtype="png")
+        msg.attach(img)
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -79,22 +87,33 @@ def send_message(alert) -> None:
     finally:
         server.quit()
 
+def get_intruder()-> str:
+    filename = datetime.now().strftime("%Y-%m-%dH%H-%M-%S.png")
+    try:
+        _, frame = cap.read()
+        data = frame.astype(np.uint8)
+        image = Image.fromarray(data) 
+        image.save(filename)
+        return filename
+    except Exception as e:
+        print(f"Error: {e}")
+
 def clean_up() -> None:
     cap.release()
     sys.exit() 
 
 if __name__ == "__main__":
     print("System Awake")
-    time.sleep(600) #10min
+    time.sleep(180) #10min
     while True:
         try:
             _, frame = cap.read()
             if check_person(frame):
+                filename = get_intruder()
                 answer = get_answer(prompt)
                 if answer:
                     answer = answer[answer.index(start_keyword):]
-                    send_message(answer)
+                    send_message(answer, filename)
                     time.sleep(120) #2min
         except KeyboardInterrupt:
             clean_up()
-
